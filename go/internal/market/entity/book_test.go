@@ -140,6 +140,72 @@ func TestBuyPartialAsset(t *testing.T) {
 	assert.Equal(10.0, float64(book.Transactions[1].Total), "Transaction should have price 10")
 }
 
+func TestBuyPartialAssetAndLeftPendingSharesRemaining(t *testing.T) {
+	assert := assert.New(t)
+	asset1 := NewAsset("asset1", "Asset 1", 100)
+
+	investor := NewInvestor("1")
+	investor2 := NewInvestor("2")
+	investor3 := NewInvestor("3")
+
+	investor.UpdateAssetPosition("asset1", 3)
+	investor3.UpdateAssetPosition("asset1", 5)
+	assert.Equal(3, investor.GetAssetPosition("asset1").Shares, "Investor 1 should have 0 shares of asset 1")
+
+	wg := sync.WaitGroup{}
+	orderChan := make(chan *Order)
+	orderChanOut := make(chan *Order)
+
+	book := NewBook(orderChan, orderChanOut, &wg)
+	go book.Trade()
+
+	wg.Add(1)
+
+	// investidor 2 quer comprar 5 shares
+	order2 := NewOrder("1", investor2, asset1, 5, 5.0, "BUY")
+	orderChan <- order2
+
+	// investidor 1 quer vender 3 shares
+	investorOneSellingOrder := NewOrder("2", investor, asset1, 3, 5.0, "SELL")
+	orderChan <- investorOneSellingOrder
+
+	go func() {
+		for range orderChanOut {
+		}
+	}()
+
+	wg.Wait()
+
+	// assert := assert.New(t)
+	assert.Equal("CLOSED", investorOneSellingOrder.Status, "Order 1 should be closed")
+	assert.Equal(0, investorOneSellingOrder.PendingShares, "Order 1 should have 0 PendingShares")
+
+	assert.Equal("OPEN", order2.Status, "Order 2 should be OPEN")
+	assert.Equal(2, order2.PendingShares, "Order 2 should have 2 PendingShares")
+
+	assert.Equal(0, investor.GetAssetPosition("asset1").Shares, "Investor 1 should have 0 shares of asset 1")
+	assert.Equal(3, investor2.GetAssetPosition("asset1").Shares, "Investor 2 should have 3 shares of asset 1")
+
+	wg.Add(1)
+	order3 := NewOrder("3", investor3, asset1, 3, 5.0, "SELL")
+	orderChan <- order3
+	wg.Wait()
+
+	assert.Equal("OPEN", order3.Status, "Order 3 should be STILL open")
+	assert.Equal("CLOSED", order2.Status, "Order 2 should be CLOSED")
+
+	assert.Equal(1, order3.PendingShares, "Order 3 should have 1 PendingShares")
+	assert.Equal(0, order2.PendingShares, "Order 2 should have 0 PendingShares")
+
+	assert.Equal(2, len(book.Transactions), "Should have 2 transactions")
+	assert.Equal(15.0, float64(book.Transactions[0].Total), "Transaction should have price 15")
+	assert.Equal(10.0, float64(book.Transactions[1].Total), "Transaction should have price 10")
+
+	assert.Equal(5, investor2.GetAssetPosition("asset1").Shares, "Investor 2 should have 5 shares of asset 1")
+	assert.Equal(3, investor3.GetAssetPosition("asset1").Shares, "Investor 3 should have 3 shares of asset 1")
+	// investor 3 tentou vender 3 de suas 5, investor 2 comprou 2, investor 3 continua com 3 shares, 1 pending no mercado, e 2 no asset position
+}
+
 func TestBuyWithDifferentPrice(t *testing.T) {
 	asset1 := NewAsset("asset1", "Asset 1", 100)
 
