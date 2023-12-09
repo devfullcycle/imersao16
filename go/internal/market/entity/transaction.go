@@ -29,8 +29,8 @@ func NewTransaction(sellingOrder *Order, buyingOrder *Order, shares int, price f
 	}
 }
 
-func (t *Transaction) CalculateTotal(shares int, price float64) {
-	t.Total = float64(t.Shares) * t.Price
+func (t *Transaction) CalculateTotal(shares int) {
+	t.Total = float64(shares) * t.Price
 }
 
 func (t *Transaction) CloseBuyOrder() {
